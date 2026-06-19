@@ -1,6 +1,6 @@
 import { getBearerToken, validateJWT } from "../auth";
 import { respondWithJSON } from "./json";
-import { getVideo } from "../db/videos";
+import {getVideo, updateVideo} from "../db/videos";
 import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { BadRequestError, NotFoundError } from "./errors";
@@ -78,10 +78,9 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   const thumbNailURL = `http://localhost:8091/api/thumbnails/${videoId}`
 
   videoMeta.thumbnailURL = thumbNailURL;
-  
 
+  updateVideo(cfg.db, videoMeta);
 
+  return respondWithJSON(200, { thumbnailURL: thumbNailURL });
 
-
-  return respondWithJSON(200, null);
 }
