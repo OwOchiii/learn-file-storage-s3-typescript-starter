@@ -5,6 +5,7 @@ import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { BadRequestError, NotFoundError } from "./errors";
 import * as path from "node:path";
+import {randomBytes} from "crypto";
 
 type Thumbnail = {
   data: ArrayBuffer;
@@ -63,13 +64,13 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
         throw new BadRequestError("Thumbnail file must be a JPEG or PNG image");
   }
 
-  const MAX_THUMBNAIL_SIZE = 10 * 1024 * 1024; // 5 MB
+  const MAX_THUMBNAIL_SIZE = 10 * 1024 * 1024; // 10 MB
   if (thumbnail.size > MAX_THUMBNAIL_SIZE) {
       throw new BadRequestError("Thumbnail file size exceeds the limit");
   }
 
-
-  const filePaths = path.join(cfg.assetsRoot, videoId + MEDIA_TYPE_TO_EXTENSION[mediaType] || "");
+  const random = randomBytes(32).toString("base64url");
+  const filePaths = path.join(cfg.assetsRoot, random + MEDIA_TYPE_TO_EXTENSION[mediaType] || "");
   await Bun.write(filePaths, thumbnail);
 
 
