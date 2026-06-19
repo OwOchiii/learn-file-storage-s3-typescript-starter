@@ -55,7 +55,17 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
       throw new BadRequestError("Thumbnail file is required");
   }
 
+  const MAX_THUMBNAIL_SIZE = 10 * 1024 * 1024; // 5 MB
+  if (thumbnail.size > MAX_THUMBNAIL_SIZE) {
+      throw new BadRequestError("Thumbnail file size exceeds the limit");
+  }
+
+  const mediaType = thumbnail.type;
+
+  const arrayBuffer = await thumbnail.arrayBuffer();
   
+
+
 
 
   return respondWithJSON(200, null);
