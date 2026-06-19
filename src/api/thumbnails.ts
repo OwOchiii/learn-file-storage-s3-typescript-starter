@@ -63,6 +63,21 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   const mediaType = thumbnail.type;
 
   const arrayBuffer = await thumbnail.arrayBuffer();
+
+  const videoMeta = getVideo(cfg.db, videoId);
+
+  if (userID !== videoMeta?.userID) {
+      throw new BadRequestError("You are not authorized to upload thumbnail for this video");
+  }
+
+  videoThumbnails.set(videoId, {
+      data: arrayBuffer,
+      mediaType: mediaType,
+  });
+
+  const thumbNailURL = `http://localhost:8091/api/thumbnails/${videoId}`
+
+  videoMeta.thumbnailURL = thumbNailURL;
   
 
 
