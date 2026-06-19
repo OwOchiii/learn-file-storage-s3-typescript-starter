@@ -4,6 +4,7 @@ import {getVideo, updateVideo} from "../db/videos";
 import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { BadRequestError, NotFoundError } from "./errors";
+import * as path from "node:path";
 
 type Thumbnail = {
   data: ArrayBuffer;
@@ -55,6 +56,10 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
       throw new BadRequestError("Thumbnail file is required");
   }
 
+  if (MEDIA_TYPE_TO_EXTENSION[thumbnail.type] != "jpeg" || MEDIA_TYPE_TO_EXTENSION[thumbnail.type] != "png"){
+        throw new BadRequestError("Thumbnail file must be a JPEG or PNG image");
+  }
+
   const MAX_THUMBNAIL_SIZE = 10 * 1024 * 1024; // 5 MB
   if (thumbnail.size > MAX_THUMBNAIL_SIZE) {
       throw new BadRequestError("Thumbnail file size exceeds the limit");
@@ -62,10 +67,8 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
 
   const mediaType = thumbnail.type;
 
-  const arrayBuffer = await thumbnail.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  const base64 = buffer.toString("base64");
-  const dataURL = `data:${mediaType};base64,${base64}`;
+  const filePaths = path.join(cfg.assetsRoot, "thumbnails", videoId,MEDIA_TYPE_TO_EXTENSION[mediaType] || "");
+  await Bun.write(filePaths, thumbnail);
 
 
   const videoMeta = getVideo(cfg.db, videoId);
@@ -74,16 +77,19 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
       throw new BadRequestError("You are not authorized to upload thumbnail for this video");
   }
 
-  videoThumbnails.set(videoId, {
-      data: arrayBuffer,
-      mediaType: mediaType,
-  });
+  const thumbnailURL = `http://localhost:${cfg.port}/assets/${videoId}.${mediaType.split("/")[1]}`;
 
-
-  videoMeta.thumbnailURL = dataURL;
+  videoMeta.thumbnailURL = thumbnailURL;
 
   updateVideo(cfg.db, videoMeta);
 
-  return respondWithJSON(200, { thumbnailURL: dataURL });
+  return respondWithJSON(200, { thumbnailURL: thumbnailURL });
 
 }
+
+const MEDIA_TYPE_TO_EXTENSION: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'video/mp4': '.mp4',
+  'application/pdf': '.pdf',
+};
