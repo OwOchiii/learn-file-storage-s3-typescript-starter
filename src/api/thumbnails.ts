@@ -49,5 +49,14 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
 
   // TODO: implement the upload here
 
+  const formData = await req.formData();
+  const thumbnail = formData.get("thumbnail");
+  if (!(thumbnail instanceof File)) {
+      throw new BadRequestError("Thumbnail file is required");
+  }
+
+  
+
+
   return respondWithJSON(200, null);
 }
