@@ -63,6 +63,10 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   const mediaType = thumbnail.type;
 
   const arrayBuffer = await thumbnail.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  const base64 = buffer.toString("base64");
+  const dataURL = `data:${mediaType};base64,${base64}`;
+
 
   const videoMeta = getVideo(cfg.db, videoId);
 
@@ -75,12 +79,11 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
       mediaType: mediaType,
   });
 
-  const thumbNailURL = `http://localhost:8091/api/thumbnails/${videoId}`
 
-  videoMeta.thumbnailURL = thumbNailURL;
+  videoMeta.thumbnailURL = dataURL;
 
   updateVideo(cfg.db, videoMeta);
 
-  return respondWithJSON(200, { thumbnailURL: thumbNailURL });
+  return respondWithJSON(200, { thumbnailURL: dataURL });
 
 }
