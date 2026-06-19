@@ -56,7 +56,10 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
       throw new BadRequestError("Thumbnail file is required");
   }
 
-  if (MEDIA_TYPE_TO_EXTENSION[thumbnail.type] != "jpeg" || MEDIA_TYPE_TO_EXTENSION[thumbnail.type] != "png"){
+  const mediaType = thumbnail.type;
+
+
+  if (mediaType.split("/")[1] !== "jpeg" && mediaType.split("/")[1] !== "png"){
         throw new BadRequestError("Thumbnail file must be a JPEG or PNG image");
   }
 
@@ -65,9 +68,8 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
       throw new BadRequestError("Thumbnail file size exceeds the limit");
   }
 
-  const mediaType = thumbnail.type;
 
-  const filePaths = path.join(cfg.assetsRoot, "thumbnails", videoId,MEDIA_TYPE_TO_EXTENSION[mediaType] || "");
+  const filePaths = path.join(cfg.assetsRoot, videoId + MEDIA_TYPE_TO_EXTENSION[mediaType] || "");
   await Bun.write(filePaths, thumbnail);
 
 
