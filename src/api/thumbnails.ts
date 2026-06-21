@@ -71,6 +71,7 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
 
   const random = randomBytes(32).toString("base64url");
   const filePaths = path.join(cfg.assetsRoot, random + MEDIA_TYPE_TO_EXTENSION[mediaType] || "");
+
   await Bun.write(filePaths, thumbnail);
 
 
@@ -80,7 +81,7 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
       throw new BadRequestError("You are not authorized to upload thumbnail for this video");
   }
 
-  const thumbnailURL = `http://localhost:${cfg.port}/assets/${videoId}.${mediaType.split("/")[1]}`;
+  const thumbnailURL = `http://localhost:${cfg.port}/assets/${random}.${mediaType.split("/")[1]}`;
 
   videoMeta.thumbnailURL = thumbnailURL;
 
