@@ -18,7 +18,18 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
   }
 
   const videoFile = (await req.formData()).get("video") as File;
+    if (!videoFile) {
+        throw new BadRequestError("Video file is required");
+    }
+    if (videoFile.size > upload_limit) {
+        throw new BadRequestError("Video file size exceeds the limit");
+    }
 
+    if(!videoFile.type.startsWith("video/mp4")) {
+        throw new BadRequestError("Video file must be a MP4 video");
+    }
+
+    
 
 
   return respondWithJSON(200, null);
