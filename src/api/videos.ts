@@ -1,23 +1,26 @@
  import { respondWithJSON } from "./json";
 
 import { type ApiConfig } from "../config";
-import type { BunRequest } from "bun";
+import {type BunRequest, S3Client} from "bun";
  import {getBearerToken, validateJWT} from "../auth.ts";
  import {getVideo, getVideos} from "../db/videos.ts";
- import {BadRequestError} from "./errors.ts";
+ import {BadRequestError, UserForbiddenError} from "./errors.ts";
 
 export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
-  const upload_limit = 1 << 30; // 1GB
-  const videoId = req.params as string;
-  const token = getBearerToken(req.headers);
-  const userID = validateJWT(token, cfg.jwtSecret);
+    const upload_limit = 1 << 30; // 1GB
+    const {videoId}  = req.params as { videoId?: string };
+    if (typeof (videoId) !== "string") {
+        throw new BadRequestError("Invalid video ID");
+    }
+    const token = getBearerToken(req.headers);
+    const userID = validateJWT(token, cfg.jwtSecret);
 
-  const videoMetaData = getVideo(cfg.db, videoId);
-  if (videoMetaData?.userID !== userID) {
-    throw new BadRequestError("You are not authorized to upload this video");
-  }
+    const videoMetaData = getVideo(cfg.db, videoId);
+    if (videoMetaData?.userID !== userID) {
+        throw new UserForbiddenError("You are not authorized to upload this video");
+    }
 
-  const videoFile = (await req.formData()).get("video") as File;
+    const videoFile = (await req.formData()).get("video") as File;
     if (!videoFile) {
         throw new BadRequestError("Video file is required");
     }
@@ -25,12 +28,18 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
         throw new BadRequestError("Video file size exceeds the limit");
     }
 
-    if(!videoFile.type.startsWith("video/mp4")) {
+    if (!videoFile.type.startsWith("video/mp4")) {
         throw new BadRequestError("Video file must be a MP4 video");
     }
 
+    const tempFile = Bun.write("tmp.mp4", videoFile);
+
+    const localFile = Bun.file("tmp.mp4");
+    const s3File = cfg.s3Client.file(`${videoId}.mp4`)
+    await s3File.write(localFile);
+    await Bun.file("tmp.mp4").delete();
     
 
-
+    const videoUrl = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${videoId}.mp4`;
   return respondWithJSON(200, null);
 }
