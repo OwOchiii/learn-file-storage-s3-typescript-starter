@@ -40,10 +40,13 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
     const videoAspect = await getVideoAspectRadio("tmp.mp4");
     console.log(`Video aspect ratio: ${videoAspect}`);
 
+    console.log("Processing video for fast start...");
+    const processedFilePath = await processVideoForFastStart("tmp.mp4");
+
     const s3Key = `${videoAspect}/${videoId}.mp4`;
     console.log(`Uploading to S3 bucket: ${cfg.s3Bucket}, region: ${cfg.s3Region}, key: ${s3Key}`);
     try {
-        const localFile = Bun.file("tmp.mp4");
+        const localFile = Bun.file(processedFilePath);
         const s3File = cfg.s3Client.file(s3Key, {
             type: "video/mp4",
             bucket: cfg.s3Bucket,
@@ -53,11 +56,13 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
     } catch (error) {
         console.error("S3 upload error:", error);
         await Bun.file("tmp.mp4").unlink();
+        await Bun.file(processedFilePath).unlink();
         throw new BadRequestError(`Failed to upload to S3: ${error}`);
     }
     
-    console.log("Cleaning up temporary file...");
+    console.log("Cleaning up temporary files...");
     await Bun.file("tmp.mp4").unlink();
+    await Bun.file(processedFilePath).unlink();
 
 
     videoMetaData.videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${s3Key}`;
@@ -102,3 +107,36 @@ export async function getVideoAspectRadio(filePath: string) : Promise<string> {
         return "other"
     }
 }
+
+export async function processVideoForFastStart(inputFilePath: string): Promise<string> {
+    const outputFilePath = inputFilePath + ".processed";
+    
+    console.log(`Processing video for fast start: ${inputFilePath} -> ${outputFilePath}`);
+    
+    const proc = Bun.spawn([
+        "ffmpeg",
+        "-i", inputFilePath,
+        "-movflags", "faststart",
+        "-map_metadata", "0",
+        "-codec", "copy",
+        "-f", "mp4",
+        outputFilePath
+    ], {
+        stdout: "pipe",
+        stderr: "pipe",
+    });
+
+    const stdoutText = await new Response(proc.stdout).text();
+    const stderrText = await new Response(proc.stderr).text();
+
+    // Wait for process to complete
+    await proc.exited;
+
+    if (proc.exitCode !== 0) {
+        throw new Error(`ffmpeg failed with exit code ${proc.exitCode}: ${stderrText}`);
+    }
+
+    console.log("Video processing complete");
+    return outputFilePath;
+}
+
