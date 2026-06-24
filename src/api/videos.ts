@@ -3,7 +3,7 @@ import {respondWithJSON} from "./json";
 import {type ApiConfig} from "../config";
 import {type BunRequest} from "bun";
 import {getBearerToken, validateJWT} from "../auth.ts";
-import {createVideo, getVideo, updateVideo} from "../db/videos.ts";
+import {createVideo, getVideo, getVideos, updateVideo} from "../db/videos.ts";
 import {BadRequestError, UserForbiddenError} from "./errors.ts";
 
 export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
@@ -36,10 +36,15 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
     await Bun.write("tmp.mp4", videoFile);
     console.log(`Temporary file written: ${videoFile.size} bytes`);
 
-    console.log(`Uploading to S3 bucket: ${cfg.s3Bucket}, region: ${cfg.s3Region}, key: ${videoId}.mp4`);
+    console.log("Detecting video aspect ratio...");
+    const videoAspect = await getVideoAspectRadio("tmp.mp4");
+    console.log(`Video aspect ratio: ${videoAspect}`);
+
+    const s3Key = `${videoAspect}/${videoId}.mp4`;
+    console.log(`Uploading to S3 bucket: ${cfg.s3Bucket}, region: ${cfg.s3Region}, key: ${s3Key}`);
     try {
         const localFile = Bun.file("tmp.mp4");
-        const s3File = cfg.s3Client.file(`${videoId}.mp4`, {
+        const s3File = cfg.s3Client.file(s3Key, {
             type: "video/mp4",
             bucket: cfg.s3Bucket,
         });
@@ -55,9 +60,45 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
     await Bun.file("tmp.mp4").unlink();
 
 
-    videoMetaData.videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${videoId}.mp4`;
+    videoMetaData.videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${s3Key}`;
     updateVideo(cfg.db, videoMetaData);
 
 
   return respondWithJSON(200, {"videoURL": videoMetaData.videoURL});
+}
+
+export async function getVideoAspectRadio(filePath: string) : Promise<string> {
+    const proc = Bun.spawn(["ffprobe", "-v", "error", "-print_format", "json", "-show_streams", filePath], {
+        stdout: "pipe",
+        stderr: "pipe",
+    });
+
+    const stdoutText = await new Response(proc.stdout).text();
+    const stderrText = await new Response(proc.stderr).text();
+
+    // Wait for process to complete
+    await proc.exited;
+
+    if (proc.exitCode !== 0) {
+        throw new Error(`ffprobe failed with exit code ${proc.exitCode}: ${stderrText}`);
+    }
+
+    const jsonData = JSON.parse(stdoutText);
+    const width = jsonData.streams[0].width;
+    const height = jsonData.streams[0].height;
+
+    // Calculate aspect ratio from width and height
+    const aspectRatio = width / height;
+
+    // Check if it's landscape (16:9 = 1.777...)
+    if (aspectRatio > 1.5) {
+        return "landscape"
+    }
+    // Check if it's portrait (9:16 = 0.5625)
+    else if (aspectRatio < 0.7) {
+        return "portrait"
+    }
+    else {
+        return "other"
+    }
 }
