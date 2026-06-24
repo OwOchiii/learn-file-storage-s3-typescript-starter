@@ -1,10 +1,10 @@
- import { respondWithJSON } from "./json";
+import {respondWithJSON} from "./json";
 
-import { type ApiConfig } from "../config";
-import {type BunRequest, S3Client} from "bun";
- import {getBearerToken, validateJWT} from "../auth.ts";
- import {getVideo, getVideos} from "../db/videos.ts";
- import {BadRequestError, UserForbiddenError} from "./errors.ts";
+import {type ApiConfig} from "../config";
+import {type BunRequest} from "bun";
+import {getBearerToken, validateJWT} from "../auth.ts";
+import {createVideo, getVideo, updateVideo} from "../db/videos.ts";
+import {BadRequestError, UserForbiddenError} from "./errors.ts";
 
 export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
     const upload_limit = 1 << 30; // 1GB
@@ -28,18 +28,36 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
         throw new BadRequestError("Video file size exceeds the limit");
     }
 
-    if (!videoFile.type.startsWith("video/mp4")) {
+    if (videoFile.type !== "video/mp4") {
         throw new BadRequestError("Video file must be a MP4 video");
     }
 
-    const tempFile = Bun.write("tmp.mp4", videoFile);
+    console.log("Writing video to temporary file...");
+    await Bun.write("tmp.mp4", videoFile);
+    console.log(`Temporary file written: ${videoFile.size} bytes`);
 
-    const localFile = Bun.file("tmp.mp4");
-    const s3File = cfg.s3Client.file(`${videoId}.mp4`)
-    await s3File.write(localFile);
-    await Bun.file("tmp.mp4").delete();
+    console.log(`Uploading to S3 bucket: ${cfg.s3Bucket}, region: ${cfg.s3Region}, key: ${videoId}.mp4`);
+    try {
+        const localFile = Bun.file("tmp.mp4");
+        const s3File = cfg.s3Client.file(`${videoId}.mp4`, {
+            type: "video/mp4",
+            bucket: cfg.s3Bucket,
+        });
+        await s3File.write(localFile);
+        console.log("Upload complete!");
+    } catch (error) {
+        console.error("S3 upload error:", error);
+        await Bun.file("tmp.mp4").unlink();
+        throw new BadRequestError(`Failed to upload to S3: ${error}`);
+    }
     
+    console.log("Cleaning up temporary file...");
+    await Bun.file("tmp.mp4").unlink();
 
-    const videoUrl = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${videoId}.mp4`;
-  return respondWithJSON(200, null);
+
+    videoMetaData.videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${videoId}.mp4`;
+    updateVideo(cfg.db, videoMetaData);
+
+
+  return respondWithJSON(200, {"videoURL": videoMetaData.videoURL});
 }
